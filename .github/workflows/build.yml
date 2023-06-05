@@ -6,22 +6,50 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-11]
-        compiler: [gcc, clang]
+        os: [ubuntu-22.04]
+        compiler: [gcc]
 
     runs-on: ${{ matrix.os }}
 
-    steps: 
-    - uses: actions/checkout@v3
-    - name: create image
-      run: |
-        docker build -t a2w:x64 .
-    - name: get aria
-      run: |
-        docker run -d --name cpa2w a2w:x64 /bin/bash
-        docker cp cpa2w:/aria2/src/aria2c.exe .
-    - name: Upload artifact
-      uses: actions/upload-artifact@master
-      with:
-        name: aria
-        path: ./aria2c.exe
+    steps:
+      - uses: actions/checkout@v3
+      - name: Linux setup
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install \
+            g++-11 \
+            clang-12 \
+            autoconf \
+            automake \
+            autotools-dev \
+            autopoint \
+            libtool \
+            pkg-config \
+            libssl-dev \
+            libc-ares-dev \
+            zlib1g-dev \
+            libsqlite3-dev \
+            libssh2-1-dev \
+            libcppunit-dev
+      - name: Setup gcc (Linux)
+        if: runner.os == 'Linux' && matrix.compiler == 'gcc'
+        run: |
+          echo 'CC=gcc-11' >> $GITHUB_ENV
+          echo 'CXX=g++-11' >> $GITHUB_ENV
+      - name: Libtool
+        run: |
+          autoreconf -i
+      - name: Configure autotools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          ./configure \
+            CPPFLAGS="-fsanitize=address" LDFLAGS="-fsanitize=address"
+      - name: Build aria2
+        run: |
+          make -j"$(nproc 2> /dev/null || sysctl -n hw.ncpu)" check
+          ls
+      - name: Upload artifact
+        uses: actions/upload-artifact@master
+        with:
+          name: aria
+          path: ./aria2c.exe
